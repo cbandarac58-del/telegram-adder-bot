@@ -10,22 +10,17 @@ from telethon.tl.types import InputPeerUser
 API_ID = int(os.environ.get('API_ID'))
 API_HASH = os.environ.get('API_HASH')
 STRING_SESSION = os.environ.get('STRING_SESSION')
-TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
+
+# ඩිරෙක්ට්ම මෙතැනට ඔයාගේ චැනල් එක දෙනවා (Secrets වල ප්‍රශ්න මඟහරවා ගැනීමට)
+TARGET_CHANNEL = '@free_movies_stream_hd'
 
 
 async def run_adder():
   client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
   await client.start()
 
-  # Try parsing channel as integer ID if it's numeric, else use string
-  channel_target = TARGET_CHANNEL.strip()
-  if channel_target.isdigit() or (
-      channel_target.startswith('-') and channel_target[1:].isdigit()
-  ):
-    channel_target = int(channel_target)
-
-  print(f'[🔍] Connecting to channel: {channel_target}')
-  my_channel = await client.get_entity(channel_target)
+  print(f'[🔍] Connecting to channel: {TARGET_CHANNEL}')
+  my_channel = await client.get_entity(TARGET_CHANNEL)
 
   if not os.path.exists('scraped_users.csv'):
     print('[!] scraped_users.csv file not found.')
