@@ -1,9 +1,9 @@
-name: Run Search Bot 24x7
+name: Telegram Search Bot 24x7
 
 on:
   schedule:
-    # සෑම පැයකටම වරක් ස්ක්‍රිප්ට් එක රන් වෙලා බෝට් එක ඇක්ටිව් තබා ගනී
-    - cron: '0 * * * *'
+    # සෑම මිනිත්තු 30කට වරක්ම ස්ක්‍රිප්ට් එක ඔටෝ රන් වෙලා බෝට් එක ලයිව් තබා ගනී
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -22,9 +22,9 @@ jobs:
         run: |
           pip install python-telegram-bot requests
 
-      - name: Run Search Bot Script
+      - name: Run Bot Script
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          # බෝට් එක මිනිත්තු 50ක් රන් වෙන්න සෙට් කරයි
-          timeout 3000 python search_bot.py || true
+          # බෝට් එක මිනිත්තු 25ක් (තත්පර 1500ක්) අඛණ්ඩව රන් වේ
+          timeout 1500 python search_bot.py || true
