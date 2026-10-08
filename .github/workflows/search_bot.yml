@@ -1,0 +1,30 @@
+name: Run Search Bot 24x7
+
+on:
+  schedule:
+    # සෑම පැයකටම වරක් ස්ක්‍රිප්ට් එක රන් වෙලා බෝට් එක ඇක්ටිව් තබා ගනී
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install python-telegram-bot requests
+
+      - name: Run Search Bot Script
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          # බෝට් එක මිනිත්තු 50ක් රන් වෙන්න සෙට් කරයි
+          timeout 3000 python search_bot.py || true
