@@ -1,0 +1,31 @@
+name: Telegram Auto Poster - 5 Movies Daily
+
+on:
+  schedule:
+    # දවසට වාර 5ක් රන් වෙනවා (පැය කිහිපයකට වරක්)
+    - cron: '0 0,5,10,15,20 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-poster:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install telethon requests
+
+      - name: Run Poster Script
+        env:
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          STRING_SESSION: ${{ secrets.STRING_SESSION }}
+        run: |
+          python poster_bot.py
