@@ -17,9 +17,15 @@ async def run_adder():
   client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
   await client.start()
 
-  print(f'[🔍] Connecting to channel: {TARGET_CHANNEL}')
-  # Safe way to get entity to avoid cache/string lookup errors
-  my_channel = await client.get_entity(TARGET_CHANNEL)
+  # Try parsing channel as integer ID if it's numeric, else use string
+  channel_target = TARGET_CHANNEL.strip()
+  if channel_target.isdigit() or (
+      channel_target.startswith('-') and channel_target[1:].isdigit()
+  ):
+    channel_target = int(channel_target)
+
+  print(f'[🔍] Connecting to channel: {channel_target}')
+  my_channel = await client.get_entity(channel_target)
 
   if not os.path.exists('scraped_users.csv'):
     print('[!] scraped_users.csv file not found.')
@@ -30,14 +36,14 @@ async def run_adder():
     count = 0
 
     for row in reader:
-      if count >= 15:  # Safe limit per run
+      if count >= 15:
         break
       try:
         user_to_add = InputPeerUser(int(row['id']), int(row['access_hash']))
         await client(InviteToChannelRequest(my_channel, [user_to_add]))
         print(f"[✔] Successfully added: {row['username']}")
         count += 1
-        time.sleep(45)  # Delay to prevent flood wait
+        time.sleep(45)
       except FloodWaitError as e:
         print(f"[!] FloodWait triggered: Sleeping for {e.seconds} seconds...")
         break
