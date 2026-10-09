@@ -1,0 +1,24 @@
+name: Find Discussion Groups
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install telethon
+        run: pip install telethon
+      
+      - name: Find groups
+        env:
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          STRING_SESSION: ${{ secrets.STRING_SESSION }}
+        run: python find_groups.py
