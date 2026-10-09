@@ -1,11 +1,18 @@
 import os
 import csv
+import sys
 import asyncio
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.tl.functions.channels import GetParticipantsRequest
 from telethon.tl.types import ChannelParticipantsSearch
 from telethon.errors import FloodWaitError
+
+# Buffering off කරන්න (log එකේ output පේන්න)
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
+print("🚀 Scraper පටන් ගන්නවා...")
 
 # ============================
 # CONFIG
@@ -14,26 +21,21 @@ API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 STRING_SESSION = os.environ.get("STRING_SESSION")
 
-# Competitor channels (ඔයාගේ niche එකේ)
 COMPETITOR_CHANNELS = [
     "english_films_with_subtitle",
     "English_Movie_Zone",
 ]
 
-# දවසට කීයක් scrape කරන්නද
 MAX_USERS_PER_CHANNEL = 100
-
-# Output file
 OUTPUT_CSV = "scraped_users.csv"
 
 
 async def scrape_channel(client, channel_name):
-    """එක channel එකකින් users ලා scrape කරනවා"""
     print(f"\n🔍 Scraping: @{channel_name}")
     
     try:
-        # Channel එකට join වෙන්න ඕන නෑ — just get entity
         channel = await client.get_entity(f"@{channel_name}")
+        print(f"✅ Channel හම්බුනා: {channel.title}")
     except Exception as e:
         print(f"❌ Channel එකට access නෑ: {e}")
         return []
@@ -44,7 +46,8 @@ async def scrape_channel(client, channel_name):
     
     try:
         while len(users) < MAX_USERS_PER_CHANNEL:
-            # Participants ලා ගන්නවා
+            print(f"  📥 Offset {offset} එකෙන් ගන්නවා...")
+            
             participants = await client(GetParticipantsRequest(
                 channel=channel,
                 filter=ChannelParticipantsSearch(''),
@@ -54,14 +57,12 @@ async def scrape_channel(client, channel_name):
             ))
             
             if not participants.users:
+                print("  ⚠️ තව users නෑ")
                 break
             
             for user in participants.users:
-                # Bots, deleted accounts skip කරන්න
                 if user.bot or user.deleted:
                     continue
-                
-                # Username නැති අයත් skip කරන්න (add කරන්න බෑ)
                 if not user.username:
                     continue
                 
@@ -77,9 +78,8 @@ async def scrape_channel(client, channel_name):
                     break
             
             offset += limit
-            print(f"  📥 {len(users)} users හම්බුනා...")
+            print(f"  📥 මේ වෙනකොට {len(users)} users")
             
-            # Rate limit එකට delay
             await asyncio.sleep(2)
             
     except FloodWaitError as e:
@@ -93,6 +93,8 @@ async def scrape_channel(client, channel_name):
 
 
 async def main():
+    print("🔌 Telegram client connect කරනවා...")
+    
     client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
     await client.start()
     print("✅ Telegram client connected")
@@ -102,7 +104,7 @@ async def main():
     for channel in COMPETITOR_CHANNELS:
         users = await scrape_channel(client, channel)
         all_users.extend(users)
-        await asyncio.sleep(5)  # Channels අතර delay
+        await asyncio.sleep(5)
     
     # Duplicates අයින් කරන්න
     seen_ids = set()
@@ -122,8 +124,10 @@ async def main():
         writer.writerows(unique_users)
     
     print(f"✅ {OUTPUT_CSV} එකට save කරා")
+    print(f"📁 File size: {os.path.getsize(OUTPUT_CSV)} bytes")
     
     await client.disconnect()
+    print("🔌 Disconnected")
 
 
 if __name__ == "__main__":
