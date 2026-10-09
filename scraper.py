@@ -8,7 +8,6 @@ from telethon.tl.functions.channels import GetParticipantsRequest
 from telethon.tl.types import ChannelParticipantsSearch
 from telethon.errors import FloodWaitError
 
-# Buffering off කරන්න (log එකේ output පේන්න)
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -21,23 +20,27 @@ API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 STRING_SESSION = os.environ.get("STRING_SESSION")
 
-COMPETITOR_CHANNELS = [
-    "english_films_with_subtitle",
-    "English_Movie_Zone",
+# ============================
+# COMPETITOR DISCUSSIONS (Groups)
+# ============================
+# Channel වෙනුවට දැන් Discussion Groups පාවිච්චි කරනවා
+COMPETITOR_GROUPS = [
+    "english_movies_netflex",  # @english_films_with_subtitle එකේ group එක
+    # දෙවෙනි එකට username නෑ, ඒ නිසා skip කරමු
 ]
 
-MAX_USERS_PER_CHANNEL = 100
+MAX_USERS_PER_GROUP = 200
 OUTPUT_CSV = "scraped_users.csv"
 
 
-async def scrape_channel(client, channel_name):
-    print(f"\n🔍 Scraping: @{channel_name}")
+async def scrape_group(client, group_name):
+    print(f"\n🔍 Scraping group: @{group_name}")
     
     try:
-        channel = await client.get_entity(f"@{channel_name}")
-        print(f"✅ Channel හම්බුනා: {channel.title}")
+        group = await client.get_entity(f"@{group_name}")
+        print(f"✅ Group හම්බුනා: {group.title}")
     except Exception as e:
-        print(f"❌ Channel එකට access නෑ: {e}")
+        print(f"❌ Group එකට access නෑ: {e}")
         return []
     
     users = []
@@ -45,11 +48,11 @@ async def scrape_channel(client, channel_name):
     limit = 100
     
     try:
-        while len(users) < MAX_USERS_PER_CHANNEL:
+        while len(users) < MAX_USERS_PER_GROUP:
             print(f"  📥 Offset {offset} එකෙන් ගන්නවා...")
             
             participants = await client(GetParticipantsRequest(
-                channel=channel,
+                channel=group,
                 filter=ChannelParticipantsSearch(''),
                 offset=offset,
                 limit=limit,
@@ -60,6 +63,7 @@ async def scrape_channel(client, channel_name):
                 print("  ⚠️ තව users නෑ")
                 break
             
+            new_count = 0
             for user in participants.users:
                 if user.bot or user.deleted:
                     continue
@@ -73,14 +77,19 @@ async def scrape_channel(client, channel_name):
                     "first_name": user.first_name or "",
                     "last_name": user.last_name or "",
                 })
+                new_count += 1
                 
-                if len(users) >= MAX_USERS_PER_CHANNEL:
+                if len(users) >= MAX_USERS_PER_GROUP:
                     break
             
-            offset += limit
-            print(f"  📥 මේ වෙනකොට {len(users)} users")
+            print(f"  📥 මේ offset එකෙන් {new_count} users (මුළු: {len(users)})")
             
-            await asyncio.sleep(2)
+            if new_count == 0:
+                print("  ⚠️ අලුත් users නෑ, නවත්තනවා")
+                break
+            
+            offset += limit
+            await asyncio.sleep(3)
             
     except FloodWaitError as e:
         print(f"⚠️ FloodWait: {e.seconds} seconds")
@@ -88,7 +97,7 @@ async def scrape_channel(client, channel_name):
     except Exception as e:
         print(f"❌ Error: {e}")
     
-    print(f"✅ @{channel_name} එකෙන් {len(users)} users හම්බුනා")
+    print(f"✅ @{group_name} එකෙන් {len(users)} users හම්බුනා")
     return users
 
 
@@ -101,8 +110,8 @@ async def main():
     
     all_users = []
     
-    for channel in COMPETITOR_CHANNELS:
-        users = await scrape_channel(client, channel)
+    for group in COMPETITOR_GROUPS:
+        users = await scrape_group(client, group)
         all_users.extend(users)
         await asyncio.sleep(5)
     
@@ -117,7 +126,6 @@ async def main():
     print(f"\n📊 මුළු users: {len(all_users)}")
     print(f"📊 Unique users: {len(unique_users)}")
     
-    # CSV එකට save කරන්න
     with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["id", "access_hash", "username", "first_name", "last_name"])
         writer.writeheader()
