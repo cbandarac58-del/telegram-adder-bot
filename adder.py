@@ -9,7 +9,7 @@ from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.types import InputPeerUser
 from telethon.errors import FloodWaitError, UserPrivacyRestrictedError, PeerFloodError
 
-# Buffering off
+# Buffering off කරන්න (log එකේ output පේන්න)
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -23,10 +23,14 @@ API_HASH = os.environ.get("API_HASH")
 STRING_SESSION = os.environ.get("STRING_SESSION")
 TARGET_CHANNEL = "free_movies_stream_hd"
 
+# දවසට කීයක් add කරන්නද
 DAILY_LIMIT = 20
-MIN_DELAY = 60
-MAX_DELAY = 120
 
+# Add කරන්න කලින් delay (seconds)
+MIN_DELAY = 90
+MAX_DELAY = 180
+
+# Files
 ADDED_FILE = "added_users.txt"
 CSV_FILE = "scraped_users.csv"
 
@@ -38,7 +42,7 @@ async def main():
     await client.start()
     print("✅ Telegram client connected")
     
-    # Target channel
+    # Target channel එක ගන්නවා
     try:
         target = await client.get_entity(f"@{TARGET_CHANNEL}")
         print(f"✅ Target channel: {target.title}")
@@ -46,14 +50,14 @@ async def main():
         print(f"❌ Target channel error: {e}")
         return
     
-    # Already added
+    # Already added users ලා load කරන්න
     added = set()
     if os.path.exists(ADDED_FILE):
         with open(ADDED_FILE, "r") as f:
             added = set(line.strip() for line in f)
         print(f"📊 Already added: {len(added)}")
     
-    # CSV
+    # CSV එකෙන් users ලා load කරන්න
     if not os.path.exists(CSV_FILE):
         print(f"❌ {CSV_FILE} නෑ")
         return
@@ -64,6 +68,7 @@ async def main():
     
     print(f"📊 Total users in CSV: {len(all_users)}")
     
+    # Already added අය අයින් කරන්න
     to_add = [u for u in all_users if u["id"] not in added]
     print(f"📊 Add කරන්න ඕන: {len(to_add)}")
     
@@ -71,11 +76,13 @@ async def main():
         print("✅ ඔක්කොම add කරලා ඉවරයි!")
         return
     
+    # දවසට limit එකට ගන්නවා
     batch = to_add[:DAILY_LIMIT]
     print(f"\n🎯 අද add කරන්නේ: {len(batch)} users\n")
     
     success = 0
     failed = 0
+    skipped = 0
     
     for i, user in enumerate(batch, 1):
         try:
@@ -89,21 +96,26 @@ async def main():
             print(f"[{i}/{len(batch)}] ✅ Added: @{user['username']}")
             success += 1
             
+            # Record කරන්න
             with open(ADDED_FILE, "a") as f:
                 f.write(user["id"] + "\n")
             
+            # Random delay (realistic)
             delay = random.randint(MIN_DELAY, MAX_DELAY)
             print(f"    ⏳ ඊළඟ එකට {delay}s...")
             await asyncio.sleep(delay)
             
         except FloodWaitError as e:
-            print(f"⚠️ FloodWait: {e.seconds}s")
+            print(f"⚠️ FloodWait: {e.seconds}s — ඉවසන්න")
             await asyncio.sleep(e.seconds)
         except UserPrivacyRestrictedError:
-            print(f"[{i}/{len(batch)}] 🔒 @{user['username']} — privacy")
+            print(f"[{i}/{len(batch)}] 🔒 @{user['username']} — privacy settings")
             failed += 1
+            # Record කරන්න (නැත්නම් නැවත try කරනවා)
+            with open(ADDED_FILE, "a") as f:
+                f.write(user["id"] + "\n")
         except PeerFloodError:
-            print(f"❌ PeerFlood — Telegram block. නවත්තනවා.")
+            print(f"❌ PeerFlood — Telegram එකෙන් block කරලා. නවත්තනවා.")
             break
         except Exception as e:
             print(f"[{i}/{len(batch)}] ❌ @{user['username']}: {e}")
@@ -113,6 +125,7 @@ async def main():
     print(f"\n📊 Results:")
     print(f"   ✅ Success: {success}")
     print(f"   ❌ Failed: {failed}")
+    print(f"   ⏭️ Skipped: {skipped}")
     
     await client.disconnect()
     print("🔌 Disconnected")
