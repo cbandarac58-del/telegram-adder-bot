@@ -2,9 +2,10 @@ name: Scrape and Add Members
 
 on:
   schedule:
-    # දවසට 2 වතාවක් run වෙනවා
-    # උදේ 6ට සහ සවස 6ට (UTC time)
+    # දවසට 3 වතාවක් run වෙනවා
+    # උදේ 6ට, මධ්‍යහ්න 12ට, සවස 6ට (UTC)
     - cron: '0 6 * * *'
+    - cron: '0 12 * * *'
     - cron: '0 18 * * *'
   workflow_dispatch:  # Manual run
 
@@ -16,34 +17,34 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: |
           pip install telethon requests
-      
+
       - name: Run Scraper
         env:
           API_ID: ${{ secrets.API_ID }}
           API_HASH: ${{ secrets.API_HASH }}
           STRING_SESSION: ${{ secrets.STRING_SESSION }}
         run: python scraper.py
-      
-      - name: Run Adder
+
+      - name: Run DM Sender
         env:
           API_ID: ${{ secrets.API_ID }}
           API_HASH: ${{ secrets.API_HASH }}
           STRING_SESSION: ${{ secrets.STRING_SESSION }}
-        run: python adder.py
-      
+        run: python dm_sender.py
+
       - name: Commit updated files
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add scraped_users.csv added_users.txt || true
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update scraped/added users"
+          git add scraped_users.csv sent_dms.txt || true
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update scraped/sent users"
           git push || true
