@@ -20,171 +20,40 @@ POSTS_PER_DAY = 5
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
-def fetch_url(url):
-    """Fetch URL using curl_cffi (browser TLS impersonation) or curl/requests."""
-    # 1. curl_cffi
+def get_movies_via_jina():
+    """Fetch movies via r.jina.ai reader which bypasses Cloudflare datacenter blocks 100%."""
     try:
-        from curl_cffi import requests as cffi_requests
-        r = cffi_requests.get(url, impersonate="chrome124", timeout=30)
-        if r.status_code == 200 and len(r.text) > 50:
-            return r.text
-        else:
-            print(f"⚠️ curl_cffi status {r.status_code} for {url}")
+        url = f"https://r.jina.ai/{SITE_URL}"
+        print(f"🌐 Fetching movies from: {url}")
+        cmd = ["curl", "-sL", url]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=35)
+        text = res.stdout if (res.returncode == 0 and len(res.stdout) > 200) else requests.get(url, timeout=35).text
+
+        movies = []
+        pattern = r'\[!\[Image \d+:[^\]]*\]\((https://image\.tmdb\.org/[^\)]+)\)(.*?###\s*([^\]]+))\]\((https://movies\.vixtube\.net/movie/\d+)'
+        matches = re.findall(pattern, text)
+        for m in matches:
+            poster = m[0]
+            middle = m[1]
+            title = m[2].strip()
+            movie_url = m[3].strip()
+
+            rate_match = re.search(r'⭐\s*([\d.]+|N/A)', middle)
+            rating = rate_match.group(1) if rate_match else "N/A"
+
+            movies.append({
+                "url": movie_url,
+                "title": title,
+                "poster": poster,
+                "rating": rating,
+                "description": None
+            })
+
+        print(f"✅ Extracted {len(movies)} trending movies via Jina reader!")
+        return movies
     except Exception as e:
-        print(f"⚠️ curl_cffi error: {e}")
-
-    # 2. curl subprocess
-    try:
-        cmd = ["curl", "-sL", "-A", USER_AGENT, url]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if res.returncode == 0 and len(res.stdout) > 50:
-            return res.stdout
-        else:
-            print(f"⚠️ curl exit {res.returncode}, stdout len: {len(res.stdout)}")
-    except Exception as e:
-        print(f"⚠️ curl error: {e}")
-
-    # 3. requests
-    try:
-        r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
-        if r.status_code == 200:
-            return r.text
-        else:
-            print(f"⚠️ requests status {r.status_code}")
-    except Exception as e:
-        print(f"⚠️ requests error: {e}")
-
-    return None
-
-
-def get_movie_details(movie_url):
-    """Extract details for a single movie page from its JSON-LD and meta tags."""
-    html = fetch_url(movie_url)
-    if not html:
-        return None
-
-    title = None
-    poster = None
-    rating = "N/A"
-    description = None
-
-    # 1. Parse JSON-LD
-    try:
-        json_blocks = re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
-        for block in json_blocks:
-            try:
-                data = json.loads(block)
-                graphs = data.get("@graph", [data]) if isinstance(data, dict) else []
-                for item in graphs:
-                    if item.get("@type") == "Movie":
-                        title = item.get("name")
-                        poster = item.get("image")
-                        desc = item.get("description")
-                        if desc:
-                            description = desc
-            except Exception:
-                continue
-    except Exception as e:
-        print(f"⚠️ JSON-LD error on {movie_url}: {e}")
-
-    # 2. Fallbacks from OpenGraph meta tags
-    if not title:
-        m = re.search(r'<meta property="og:title" content="([^"]+)"', html)
-        if m:
-            title = m.group(1).split(" - ")[0].strip()
-
-    if not poster:
-        m = re.search(r'<meta property="og:image" content="([^"]+)"', html)
-        if m:
-            poster = m.group(1)
-
-    if not description:
-        m = re.search(r'<meta property="og:description" content="([^"]+)"', html)
-        if m:
-            description = m.group(1)
-
-    # 3. Rating extraction
-    m_rate = re.search(r'rating of ([\d.]+)/10 on TMDB', html)
-    if m_rate:
-        rating = m_rate.group(1)
-    else:
-        m_rate2 = re.search(r'class="badge-(?:hd|rating)"[^>]*>\s*(?:⭐\s*)?([\d.]+)', html)
-        if m_rate2:
-            rating = m_rate2.group(1)
-
-    if not title:
-        return None
-
-    return {
-        "url": movie_url,
-        "title": title,
-        "poster": poster,
-        "rating": rating,
-        "description": description
-    }
-
-
-def get_movies_from_sitemaps(posted_set):
-    """Get unposted movie URLs from the site's XML sitemaps using regex."""
-    movie_urls = []
-    seen = set()
-    sitemaps = [
-        f"{SITE_URL}/sitemaps/movies-1.xml",
-        f"{SITE_URL}/sitemaps/movies-2.xml"
-    ]
-
-    for sm_url in sitemaps:
-        print(f"📄 Checking sitemap: {sm_url}")
-        content = fetch_url(sm_url)
-        if not content:
-            print(f"⚠️ Sitemap {sm_url} returned empty content")
-            continue
-        try:
-            matches = re.findall(r'https://movies\.vixtube\.net/movie/\d+', content)
-            print(f"  Matched {len(matches)} raw URLs from {sm_url}")
-            for m in matches:
-                if m not in posted_set and m not in seen:
-                    seen.add(m)
-                    movie_urls.append(m)
-        except Exception as e:
-            print(f"⚠️ Sitemap regex error: {e}")
-
-    print(f"📊 Found {len(movie_urls)} unposted movie URLs in sitemaps")
-    return movie_urls
-
-
-def get_trending_from_homepage():
-    """Try to extract trending movies from the homepage JSON-LD."""
-    html = fetch_url(SITE_URL)
-    if not html:
+        print(f"⚠️ Jina reader error: {e}")
         return []
-
-    movies = []
-    try:
-        json_blocks = re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
-        for block in json_blocks:
-            try:
-                data = json.loads(block)
-                graphs = data.get("@graph", [data]) if isinstance(data, dict) else []
-                for item in graphs:
-                    if item.get("@type") == "ItemList":
-                        for el in item.get("itemListElement", []):
-                            m = el.get("item", {})
-                            url = m.get("url")
-                            if url and "/movie/" in url:
-                                movies.append({
-                                    "url": url,
-                                    "title": m.get("name", "").strip(),
-                                    "poster": m.get("image", ""),
-                                    "rating": "N/A",
-                                    "description": None
-                                })
-            except Exception:
-                continue
-    except Exception as e:
-        print(f"⚠️ Homepage JSON-LD error: {e}")
-
-    return movies
 
 
 async def post_to_telegram():
@@ -194,34 +63,22 @@ async def post_to_telegram():
         with open(posted_file, "r") as f:
             posted = set(line.strip() for line in f if line.strip())
 
-    candidates = []
+    # Get trending movies
+    movies = get_movies_via_jina()
 
-    # 1. Try homepage trending movies
-    trending = get_trending_from_homepage()
-    for t in trending:
-        if t["url"] not in posted and not any(c["url"] == t["url"] for c in candidates):
-            candidates.append(t)
-
-    # 2. Fill from sitemaps
-    if len(candidates) < POSTS_PER_DAY:
-        sitemap_urls = get_movies_from_sitemaps(posted)
-        random.shuffle(sitemap_urls)
-        for sm_url in sitemap_urls:
-            if not any(c["url"] == sm_url for c in candidates):
-                print(f"🔍 Fetching details for: {sm_url}")
-                det = get_movie_details(sm_url)
-                if det:
-                    candidates.append(det)
-                    print(f"  Got details: {det['title']}")
-                if len(candidates) >= POSTS_PER_DAY:
-                    break
-                time.sleep(1)
-
-    if not candidates:
+    if not movies:
         print("❌ කිසිදු movie එකක් සොයාගත නොහැකි විය.")
         return
 
-    to_post = candidates[:POSTS_PER_DAY]
+    # Filter out already posted movies
+    new_movies = [m for m in movies if m["url"] not in posted]
+    print(f"📊 අලුත් movies ගණන: {len(new_movies)} (දැනටමත් post කල ගණන: {len(posted)})")
+
+    if not new_movies:
+        print("ℹ️ අලුත් movies නැත (සියල්ල දැනටමත් post කර ඇත).")
+        return
+
+    to_post = new_movies[:POSTS_PER_DAY]
     print(f"🚀 Telegram වෙත post කිරීමට නියමිත movies: {len(to_post)}")
 
     client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
@@ -235,11 +92,6 @@ async def post_to_telegram():
             caption = f"🎬 **{movie['title']}**\n\n"
             if movie.get("rating") and movie["rating"] != "N/A":
                 caption += f"⭐ Rating: {movie['rating']}/10\n\n"
-            if movie.get("description"):
-                desc = movie["description"]
-                if len(desc) > 200:
-                    desc = desc[:200] + "..."
-                caption += f"📝 {desc}\n\n"
             caption += f"🍿 [Watch Online]({movie['url']})\n"
             if channel_tag:
                 caption += f"\n📢 Join: {channel_tag}"
