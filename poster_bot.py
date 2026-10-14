@@ -21,22 +21,38 @@ POSTS_PER_DAY = 5
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 def fetch_url(url):
-    """Fetch URL using curl or requests."""
+    """Fetch URL using curl_cffi (browser TLS impersonation) or curl/requests."""
+    # 1. curl_cffi
     try:
-        cmd = ["curl", "-sL", "--compressed", "-H", f"User-Agent: {USER_AGENT}", url]
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30)
+        from curl_cffi import requests as cffi_requests
+        r = cffi_requests.get(url, impersonate="chrome124", timeout=30)
+        if r.status_code == 200 and len(r.text) > 50:
+            return r.text
+        else:
+            print(f"⚠️ curl_cffi status {r.status_code} for {url}")
+    except Exception as e:
+        print(f"⚠️ curl_cffi error: {e}")
+
+    # 2. curl subprocess
+    try:
+        cmd = ["curl", "-sL", "-A", USER_AGENT, url]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if res.returncode == 0 and len(res.stdout) > 50:
             return res.stdout
+        else:
+            print(f"⚠️ curl exit {res.returncode}, stdout len: {len(res.stdout)}")
     except Exception as e:
-        print(f"⚠️ curl error for {url}: {e}")
+        print(f"⚠️ curl error: {e}")
 
+    # 3. requests
     try:
-        headers = {"User-Agent": USER_AGENT}
-        r = requests.get(url, headers=headers, timeout=30)
+        r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
         if r.status_code == 200:
             return r.text
+        else:
+            print(f"⚠️ requests status {r.status_code}")
     except Exception as e:
-        print(f"⚠️ requests error for {url}: {e}")
+        print(f"⚠️ requests error: {e}")
 
     return None
 
@@ -121,9 +137,11 @@ def get_movies_from_sitemaps(posted_set):
         print(f"📄 Checking sitemap: {sm_url}")
         content = fetch_url(sm_url)
         if not content:
+            print(f"⚠️ Sitemap {sm_url} returned empty content")
             continue
         try:
             matches = re.findall(r'https://movies\.vixtube\.net/movie/\d+', content)
+            print(f"  Matched {len(matches)} raw URLs from {sm_url}")
             for m in matches:
                 if m not in posted_set and m not in seen:
                     seen.add(m)
@@ -194,6 +212,7 @@ async def post_to_telegram():
                 det = get_movie_details(sm_url)
                 if det:
                     candidates.append(det)
+                    print(f"  Got details: {det['title']}")
                 if len(candidates) >= POSTS_PER_DAY:
                     break
                 time.sleep(1)
@@ -253,7 +272,7 @@ async def post_to_telegram():
                     parse_mode="md"
                 )
 
-            print(f"✅ Successfully Posted: {movie['title']}")
+            print(f"✅ Successfully Posted to Telegram: {movie['title']}")
 
             with open(posted_file, "a") as f:
                 f.write(movie["url"] + "\n")
