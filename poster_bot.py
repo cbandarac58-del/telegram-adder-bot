@@ -5,7 +5,6 @@ import time
 import random
 import subprocess
 import requests
-import xml.etree.ElementTree as ET
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
@@ -110,8 +109,9 @@ def get_movie_details(movie_url):
 
 
 def get_movies_from_sitemaps(posted_set):
-    """Get unposted movie URLs from the site's XML sitemaps."""
+    """Get unposted movie URLs from the site's XML sitemaps using regex."""
     movie_urls = []
+    seen = set()
     sitemaps = [
         f"{SITE_URL}/sitemaps/movies-1.xml",
         f"{SITE_URL}/sitemaps/movies-2.xml"
@@ -123,15 +123,13 @@ def get_movies_from_sitemaps(posted_set):
         if not content:
             continue
         try:
-            root = ET.fromstring(content)
-            for child in root:
-                for elem in child:
-                    if "loc" in elem.tag and elem.text:
-                        loc = elem.text.strip()
-                        if "/movie/" in loc and loc not in posted_set:
-                            movie_urls.append(loc)
+            matches = re.findall(r'https://movies\.vixtube\.net/movie/\d+', content)
+            for m in matches:
+                if m not in posted_set and m not in seen:
+                    seen.add(m)
+                    movie_urls.append(m)
         except Exception as e:
-            print(f"⚠️ Sitemap parse error: {e}")
+            print(f"⚠️ Sitemap regex error: {e}")
 
     print(f"📊 Found {len(movie_urls)} unposted movie URLs in sitemaps")
     return movie_urls
@@ -186,10 +184,9 @@ async def post_to_telegram():
         if t["url"] not in posted and not any(c["url"] == t["url"] for c in candidates):
             candidates.append(t)
 
-    # 2. If candidates < POSTS_PER_DAY, fill from sitemaps
+    # 2. Fill from sitemaps
     if len(candidates) < POSTS_PER_DAY:
         sitemap_urls = get_movies_from_sitemaps(posted)
-        # Shuffle slightly to get fresh diverse movies
         random.shuffle(sitemap_urls)
         for sm_url in sitemap_urls:
             if not any(c["url"] == sm_url for c in candidates):
@@ -261,7 +258,7 @@ async def post_to_telegram():
             with open(posted_file, "a") as f:
                 f.write(movie["url"] + "\n")
 
-            time.sleep(15)
+            time.sleep(10)
 
         except Exception as e:
             print(f"❌ Error posting {movie.get('title')}: {e}")
