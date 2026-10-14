@@ -2,10 +2,9 @@ name: Telegram Auto Poster - 5 Movies Daily
 
 on:
   schedule:
-    # හැම 4 පැයකට වරක් run වෙනවා (දවසට 6 වතාවක්)
-    # ඒත් script එකේ POSTS_PER_DAY = 5 නිසා දවසට 5ක් විතරයි post වෙන්නේ
+    # Runs every 4 hours
     - cron: '0 */4 * * *'
-  workflow_dispatch:  # manual run කරන්නත් පුළුවන්
+  workflow_dispatch:
 
 jobs:
   post:
@@ -34,6 +33,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add posted_movies.txt || true
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted movies"
+          touch posted_movies.txt
+          git add posted_movies.txt
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted movies [skip ci]"
           git push || true
