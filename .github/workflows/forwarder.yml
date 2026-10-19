@@ -3,7 +3,7 @@ name: Auto Discover and Forwarder
 on:
   schedule:
     # දවසට වාර 4කට වරක් ස්වයංක්‍රීයව රන් වේ
-    - cron: '0 */6 * * *'
+#     - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
