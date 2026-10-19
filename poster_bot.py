@@ -154,11 +154,26 @@ async def post_to_telegram():
 
     for movie in to_post:
         try:
+            # Dynamic SEO Hashtags
+            tags = ["#Movie", "#Hollywood", "#HD", "#WatchOnline", "#Cinema"]
+            year_match = re.search(r'\b(202\d|19\d\d)\b', movie['title'])
+            if year_match:
+                tags.append(f"#Movie{year_match.group(1)}")
+            else:
+                tags.append("#Movie2026")
+            
+            clean_title = re.sub(r'[^a-zA-Z0-9]', '', movie['title'])
+            if clean_title and len(clean_title) <= 20:
+                tags.append(f"#{clean_title}")
+            
+            hashtags = " ".join(tags[:6])
+
             caption = f"🎬 **{movie['title']}**\n\n"
             if movie.get("rating") and movie["rating"] != "N/A":
                 caption += f"⭐ Rating: {movie['rating']}/10\n\n"
             caption += f"🍿 [Watch Online]({movie['url']})\n\n"
-            caption += f"👉 Join for Daily HD Movies!"
+            caption += f"👉 Join for Daily HD Movies: @free_movies_stream_hd\n\n"
+            caption += f"{hashtags}"
 
             # Poster download
             img_path = None
