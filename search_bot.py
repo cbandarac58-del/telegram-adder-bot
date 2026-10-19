@@ -1,93 +1,174 @@
 import os
+import re
+import time
 import requests
-import xml.etree.ElementTree as ET
-from telegram import InlineQueryResultArticle, InputTextMessageContent, Update
+from telegram import (
+    InlineQueryResultArticle,
+    InputTextMessageContent,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Update
+)
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
     InlineQueryHandler,
+    CommandHandler,
     MessageHandler,
     filters,
 )
 
-# BotFather ගෙන් ලැබුණු API Token එක මෙතැනට සෙට් වෙයි
-BOT_TOKEN = os.environ.get(
-    'BOT_TOKEN', '8928636596:AAGhaQvLAXrJ2p1R0LDpF1GnUqCHRhW3U'
-)
-SITE_URL = 'https://movies.vixtube.net'
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8928636596:AAGhaQvLAXrJ2p1R0LDpF1GnUqCHRhW3U")
+SITE_URL = "https://movies.vixtube.net"
+CHANNEL_URL = "https://t.me/free_movies_stream_hd"
+CHANNEL_NAME = "@free_movies_stream_hd"
+
+# Cache movie titles and links
+CACHED_MOVIES = []
+LAST_CACHE_TIME = 0
+
+def get_all_movies():
+    """Fetch movie URLs from sitemaps and cache them in memory."""
+    global CACHED_MOVIES, LAST_CACHE_TIME
+    now = time.time()
+    if CACHED_MOVIES and (now - LAST_CACHE_TIME < 3600):
+        return CACHED_MOVIES
+
+    movies = []
+    sitemaps = [
+        f"{SITE_URL}/sitemaps/movies-1.xml",
+        f"{SITE_URL}/sitemaps/movies-2.xml"
+    ]
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0"}
+
+    for sm in sitemaps:
+        try:
+            r = requests.get(sm, headers=headers, timeout=15)
+            if r.status_code == 200:
+                urls = re.findall(r'https://movies\.vixtube\.net/movie/\d+', r.text)
+                for u in urls:
+                    slug = u.split("/")[-1]
+                    movies.append({"url": u, "slug": slug})
+        except Exception as e:
+            print(f"Sitemap fetch error: {e}")
+
+    if movies:
+        CACHED_MOVIES = movies
+        LAST_CACHE_TIME = now
+        print(f"Cached {len(CACHED_MOVIES)} movies.")
+    return CACHED_MOVIES
 
 
-def search_site_movies(query):
-  matching_movies = []
-  try:
-    response = requests.get(f'{SITE_URL}/sitemap.xml')
-    if response.status_code == 200:
-      root = ET.fromstring(response.content)
-      for child in root:
-        for elem in child:
-          if 'loc' in elem.tag:
-            url = elem.text
-            if '/movie/' in url:
-              movie_slug = url.split('/')[-1].replace('-', ' ').lower()
-              if not query or query.lower() in movie_slug:
-                matching_movies.append(url)
-  except Exception as e:
-    print(f'Error reading sitemap: {e}')
+def search_movies(query):
+    query_clean = query.lower().strip()
+    all_movies = get_all_movies()
+    if not all_movies:
+        return []
 
-  return matching_movies[:10]
+    # If query is empty, return trending/top 10
+    if not query_clean:
+        return all_movies[:10]
+
+    matched = []
+    for m in all_movies:
+        # Match slug or numeric ID
+        if query_clean in m["slug"]:
+            matched.append(m)
+        if len(matched) >= 15:
+            break
+    return matched
 
 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-  query = update.inline_query.query
-  found_movies = search_site_movies(query)
+    query = update.inline_query.query
+    found = search_movies(query)
 
-  results = []
-  for i, link in enumerate(found_movies):
-    movie_name = link.split('/')[-1].replace('-', ' ').title()
-    results.append(
-        InlineQueryResultArticle(
-            id=str(i),
-            title=f'🎬 {movie_name}',
-            description='Click to share HD stream link',
-            input_message_content=InputTextMessageContent(
-                message_text=(
-                    f'🎬 **{movie_name}**\n\nWatch & Download in HD Stream'
-                    f' now:\n{link}'
-                )
-            ),
+    results = []
+    for i, item in enumerate(found[:10]):
+        url = item["url"]
+        movie_title = f"Movie #{item['slug']}"
+
+        # Channel join & watch buttons attached to shared card
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🍿 Watch in HD", url=url),
+                InlineKeyboardButton("📢 Join Channel", url=CHANNEL_URL)
+            ]
+        ])
+
+        message_text = (
+            f"🎬 **Watch on Vix Movies**\n\n"
+            f"🍿 **Link:** [Click to Watch Online]({url})\n\n"
+            f"👉 **Join our Channel for Daily HD Movies:** {CHANNEL_NAME}"
         )
-    )
 
-  await update.inline_query.answer(results, cache_time=5)
+        results.append(
+            InlineQueryResultArticle(
+                id=str(i),
+                title=f"🎬 Watch {movie_title}",
+                description="Tap to share HD stream & invite link",
+                thumb_url="https://image.tmdb.org/t/p/w200/1n37BJchWHLiSYQkuFxe5KjB951.jpg",
+                input_message_content=InputTextMessageContent(
+                    message_text=message_text,
+                    parse_mode="markdown",
+                    disable_web_page_preview=False
+                ),
+                reply_markup=keyboard
+            )
+        )
+
+    await update.inline_query.answer(results, cache_time=10)
+
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 Join Official Channel", url=CHANNEL_URL)],
+        [InlineKeyboardButton("🌐 Visit Website", url=SITE_URL)]
+    ])
+    text = (
+        "👋 **Welcome to HD Movies Hub Bot!**\n\n"
+        "🍿 Search any movie instantly in any chat by typing:\n"
+        "`@free_movies_stream_hd_bot <movie name>`\n\n"
+        f"📢 Make sure to join our official channel for daily updates:\n{CHANNEL_NAME}"
+    )
+    await update.message.reply_text(text, reply_markup=keyboard, parse_mode="markdown")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-  user_query = update.message.text
-  if user_query.startswith('/'):
-    return
+    query = update.message.text
+    if query.startswith("/"):
+        return
 
-  found_movies = search_site_movies(user_query)
+    found = search_movies(query)
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 Join Official Channel", url=CHANNEL_URL)]
+    ])
 
-  if found_movies:
-    response_text = (
-        f'🎬 **Search Results for "{user_query}":**\n\nClick below to watch in'
-        ' HD:\n'
+    if found:
+        response_text = f"🔍 **Search Results for '{query}':**\n\n"
+        for item in found[:5]:
+            response_text += f"🎬 [Watch Movie #{item['slug']}]({item['url']})\n"
+        response_text += f"\n👉 Daily HD releases at {CHANNEL_NAME}"
+    else:
+        response_text = (
+            f"❌ No movies found for '{query}'.\n\n"
+            f"Browse all movies here: {SITE_URL}\n"
+            f"Or join {CHANNEL_NAME} for requests!"
+        )
+
+    await update.message.reply_text(
+        response_text,
+        reply_markup=keyboard,
+        parse_mode="markdown",
+        disable_web_page_preview=True
     )
-    for link in found_movies[:5]:
-      response_text += f'👉 {link}\n'
-  else:
-    response_text = (
-        f'❌ No movies found for "{user_query}".\n\nBrowse all movies here:'
-        f' {SITE_URL}'
-    )
-
-  await update.message.reply_text(response_text)
 
 
-if __name__ == '__main__':
-  app = ApplicationBuilder().token(BOT_TOKEN).build()
-  app.add_handler(InlineQueryHandler(inline_query))
-  app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(InlineQueryHandler(inline_query))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-  print('Interactive Search Bot is running live...')
-  app.run_polling()
+    print("🚀 Interactive Search & Promote Bot is running live...")
+    app.run_polling()
