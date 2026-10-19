@@ -4,9 +4,9 @@ on:
   schedule:
     # දවසට 3 වතාවක් run වෙනවා
     # උදේ 6ට, මධ්‍යහ්න 12ට, සවස 6ට (UTC)
-    - cron: '0 6 * * *'
-    - cron: '0 12 * * *'
-    - cron: '0 18 * * *'
+#     - cron: '0 6 * * *'
+#     - cron: '0 12 * * *'
+#     - cron: '0 18 * * *'
   workflow_dispatch:  # Manual run
 
 jobs:
