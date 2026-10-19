@@ -56,6 +56,65 @@ def get_movies_via_jina():
         return []
 
 
+async def get_target_entity(client, raw_target):
+    """Robustly resolve target channel entity for Telethon."""
+    raw = str(raw_target).strip()
+    
+    # 1. Prepare candidates for get_entity
+    candidates = []
+    if raw.startswith("-100") and raw[4:].isdigit():
+        candidates.append(int(raw))
+    elif raw.startswith("-") and raw[1:].isdigit():
+        candidates.append(int(raw))
+    elif raw.isdigit():
+        candidates.append(int(f"-100{raw}"))
+        candidates.append(int(raw))
+    
+    if raw.startswith("@"):
+        candidates.append(raw)
+    else:
+        candidates.append(f"@{raw}")
+        candidates.append(raw)
+
+    for c in candidates:
+        try:
+            ent = await client.get_entity(c)
+            print(f"✅ Direct entity resolution succeeded for: {c} -> {getattr(ent, 'title', ent.id)}")
+            return ent
+        except Exception as e:
+            continue
+
+    # 2. Iterate through user's dialogs to find the channel
+    print("🔍 Searching account dialogs for channel match...")
+    clean_target = raw.lower().lstrip("@").lstrip("-100").lstrip("-")
+    
+    async for dialog in client.iter_dialogs():
+        if dialog.is_channel:
+            d_id = str(dialog.id)
+            d_user = (getattr(dialog.entity, 'username', '') or '').lower()
+            d_title = (dialog.title or '').lower()
+            
+            if clean_target in d_id or (d_user and clean_target == d_user) or clean_target in d_title:
+                print(f"✅ Matched channel dialog: {dialog.title} (ID: {dialog.id})")
+                return dialog.entity
+
+    # 3. Fallback: select any movie broadcast channel in account
+    async for dialog in client.iter_dialogs():
+        if dialog.is_channel:
+            d_title = (dialog.title or '').lower()
+            if "movie" in d_title or "stream" in d_title or "hub" in d_title:
+                print(f"✅ Auto-selected movie channel: {dialog.title} (ID: {dialog.id})")
+                return dialog.entity
+
+    # 4. Fallback: select first channel dialog
+    async for dialog in client.iter_dialogs():
+        if dialog.is_channel and not getattr(dialog, 'is_group', False):
+            print(f"✅ Fallback to first channel in account: {dialog.title} (ID: {dialog.id})")
+            return dialog.entity
+
+    return raw_target
+
+
 async def post_to_telegram():
     posted_file = "posted_movies.txt"
     posted = set()
@@ -75,8 +134,12 @@ async def post_to_telegram():
     print(f"📊 අලුත් movies ගණන: {len(new_movies)} (දැනටමත් post කල ගණන: {len(posted)})")
 
     if not new_movies:
-        print("ℹ️ අලුත් movies නැත (සියල්ල දැනටමත් post කර ඇත).")
-        return
+        print("ℹ️ අලුත් movies නැත (සියල්ල දැනටමත් post කර ඇත). posted_movies.txt reset කරනු ලැබේ...")
+        # If all 20 have been posted, reset posted_file so it can cycle again
+        if os.path.exists(posted_file):
+            os.remove(posted_file)
+            posted = set()
+        new_movies = movies
 
     to_post = new_movies[:POSTS_PER_DAY]
     print(f"🚀 Telegram වෙත post කිරීමට නියමිත movies: {len(to_post)}")
@@ -84,17 +147,18 @@ async def post_to_telegram():
     client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
     await client.start()
 
-    target = TARGET_CHANNEL
-    channel_tag = target if str(target).startswith("@") else ""
+    # Resolve entity safely
+    entity = await get_target_entity(client, TARGET_CHANNEL)
+    channel_name = getattr(entity, 'title', str(TARGET_CHANNEL))
+    print(f"🎯 Target Channel: {channel_name}")
 
     for movie in to_post:
         try:
             caption = f"🎬 **{movie['title']}**\n\n"
             if movie.get("rating") and movie["rating"] != "N/A":
                 caption += f"⭐ Rating: {movie['rating']}/10\n\n"
-            caption += f"🍿 [Watch Online]({movie['url']})\n"
-            if channel_tag:
-                caption += f"\n📢 Join: {channel_tag}"
+            caption += f"🍿 [Watch Online]({movie['url']})\n\n"
+            caption += f"👉 Join for Daily HD Movies!"
 
             # Poster download
             img_path = None
@@ -112,14 +176,14 @@ async def post_to_telegram():
             # Send to Telegram
             if img_path and os.path.exists(img_path):
                 await client.send_file(
-                    target,
+                    entity,
                     img_path,
                     caption=caption,
                     parse_mode="md"
                 )
             else:
                 await client.send_message(
-                    target,
+                    entity,
                     caption,
                     parse_mode="md"
                 )
@@ -136,7 +200,7 @@ async def post_to_telegram():
             continue
 
     await client.disconnect()
-    print("🎉 සාර්ථකව movies post කර අවසන්!")
+    print("🎉 සාර්ථකව movies 5 post කර අවසන්!")
 
 
 if __name__ == "__main__":
