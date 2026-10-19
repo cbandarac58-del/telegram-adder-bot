@@ -16,7 +16,7 @@ API_HASH = os.environ.get("API_HASH")
 STRING_SESSION = os.environ.get("STRING_SESSION")
 TARGET_CHANNEL = os.environ.get("TARGET_CHANNEL")
 SITE_URL = "https://movies.vixtube.net"
-POSTS_PER_DAY = 5
+POSTS_PER_RUN = 1
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
@@ -141,7 +141,7 @@ async def post_to_telegram():
             posted = set()
         new_movies = movies
 
-    to_post = new_movies[:POSTS_PER_DAY]
+    to_post = new_movies[:POSTS_PER_RUN]
     print(f"🚀 Telegram වෙත post කිරීමට නියමිත movies: {len(to_post)}")
 
     client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
@@ -200,7 +200,7 @@ async def post_to_telegram():
             continue
 
     await client.disconnect()
-    print("🎉 සාර්ථකව movies 5 post කර අවසන්!")
+    print("🎉 සාර්ථකව movie එකක් post කර අවසන්!")
 
 
 if __name__ == "__main__":
