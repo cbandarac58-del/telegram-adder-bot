@@ -1,9 +1,14 @@
-name: Telegram Auto Poster - 5 Movies Daily
+name: Telegram Auto Poster - 5 Movies Daily (Spaced Out)
 
 on:
   schedule:
-    # Runs daily at 04:00 UTC (9:30 AM Sri Lanka time)
-    - cron: '0 4 * * *'
+    # 5 runs per day spread across Sri Lanka prime hours:
+    # UTC 03:00 -> 08:30 AM SL time (Morning)
+    # UTC 07:00 -> 12:30 PM SL time (Afternoon)
+    # UTC 11:00 -> 04:30 PM SL time (Evening)
+    # UTC 15:00 -> 08:30 PM SL time (Prime Night)
+    # UTC 18:00 -> 11:30 PM SL time (Late Night)
+    - cron: '0 3,7,11,15,18 * * *'
   workflow_dispatch:
 
 jobs:
