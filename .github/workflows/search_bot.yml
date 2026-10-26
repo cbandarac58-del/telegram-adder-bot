@@ -3,7 +3,7 @@ name: Telegram Search Bot 24x7
 on:
   schedule:
     # සෑම මිනිත්තු 30කට වරක්ම ස්ක්‍රිප්ට් එක ඔටෝ රන් වෙලා බෝට් එක ලයිව් තබා ගනී
-    - cron: '*/30 * * * *'
+#     - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
