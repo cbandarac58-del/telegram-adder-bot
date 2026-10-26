@@ -18,7 +18,7 @@ from telegram.ext import (
     filters,
 )
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8928636596:AAGhaQvLAXrJ2p1R0LDpF1GnUqCHRhW3U")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 SITE_URL = "https://movies.vixtube.net"
 CHANNEL_URL = "https://t.me/free_movies_stream_hd"
 CHANNEL_NAME = "@free_movies_stream_hd"
