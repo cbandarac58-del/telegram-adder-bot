@@ -1,14 +1,10 @@
-name: Telegram Auto Poster - 5 Movies Daily (Spaced Out)
+name: Telegram Auto Poster - 12 Posts Daily (7 Movies, 5 TV Series)
 
 on:
   schedule:
-    # 5 runs per day spread across Sri Lanka prime hours:
-    # UTC 03:00 -> 08:30 AM SL time (Morning)
-    # UTC 07:00 -> 12:30 PM SL time (Afternoon)
-    # UTC 11:00 -> 04:30 PM SL time (Evening)
-    # UTC 15:00 -> 08:30 PM SL time (Prime Night)
-    # UTC 18:00 -> 11:30 PM SL time (Late Night)
-    - cron: '0 3,7,11,15,18 * * *'
+    # Runs every 2 hours: 00:00, 02:00, 04:00, 06:00, 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00 UTC
+    # Exactly 12 posts per day: 7 Movies & 5 TV Series
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -17,6 +13,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -34,11 +32,12 @@ jobs:
           TARGET_CHANNEL: ${{ secrets.TARGET_CHANNEL }}
         run: python poster_bot.py
       
-      - name: Commit posted_movies.txt
+      - name: Commit posted_movies.txt and daily_tracker.json
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          touch posted_movies.txt
-          git add posted_movies.txt
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted movies [skip ci]"
-          git push || true
+          git pull --rebase origin main || true
+          touch posted_movies.txt daily_tracker.json
+          git add posted_movies.txt daily_tracker.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted content history & quota [skip ci]"
+          git push origin main || true
