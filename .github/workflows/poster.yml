@@ -36,8 +36,8 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git pull --rebase origin main || true
           touch posted_movies.txt daily_tracker.json
           git add posted_movies.txt daily_tracker.json
           git diff --quiet && git diff --staged --quiet || git commit -m "Update posted content history & quota [skip ci]"
+          git pull --rebase origin main || true
           git push origin main || true
