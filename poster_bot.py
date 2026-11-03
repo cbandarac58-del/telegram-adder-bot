@@ -15,6 +15,10 @@ API_ID = int(os.environ.get("API_ID", "0"))
 API_HASH = os.environ.get("API_HASH", "")
 STRING_SESSION = os.environ.get("STRING_SESSION", "")
 TARGET_CHANNEL = os.environ.get("TARGET_CHANNEL", "@free_movies_stream_hd")
+# If TARGET_CHANNEL was set to the discussion group, force it back to channel
+if "4373091333" in str(TARGET_CHANNEL):
+    TARGET_CHANNEL = "@free_movies_stream_hd"
+
 SITE_URL = "https://movies.vixtube.net"
 
 HEADERS = {
@@ -51,82 +55,115 @@ FALLBACK_TV = [
     {"url": f"{SITE_URL}/tv/1100", "title": "How I Met Your Mother", "poster": "https://image.tmdb.org/t/p/w500/b34jPzmB0wZy7EjgAGOW0v6UmHG.jpg", "rating": "8.2", "type": "tv"},
     {"url": f"{SITE_URL}/tv/18165", "title": "The Vampire Diaries", "poster": "https://image.tmdb.org/t/p/w500/bVRaSm5bV6dZ8vV8Rrh6dO7d1Wf.jpg", "rating": "8.3", "type": "tv"},
     {"url": f"{SITE_URL}/tv/60735", "title": "The Flash", "poster": "https://image.tmdb.org/t/p/w500/rg8N7x27Ef6P3IRWs40zs895Bgv.jpg", "rating": "7.8", "type": "tv"},
-    {"url": f"{SITE_URL}/tv/5920", "title": "The Mentalist", "poster": "https://image.tmdb.org/t/p/w500/775G2f6nC3m09wB5h0oB68oQGvI.jpg", "rating": "8.4", "type": "tv"},
-    {"url": f"{SITE_URL}/tv/1416", "title": "Grey's Anatomy", "poster": "https://image.tmdb.org/t/p/w500/jcEl8SISNfGdlQFvmRZEZXICr3P.jpg", "rating": "8.2", "type": "tv"},
-    {"url": f"{SITE_URL}/tv/1421", "title": "Modern Family", "poster": "https://image.tmdb.org/t/p/w500/fu5v1m6BWhjRJjVqjG3n1p2Z5Z0.jpg", "rating": "8.5", "type": "tv"}
+    {"url": f"{SITE_URL}/tv/1399", "title": "Game of Thrones", "poster": "https://image.tmdb.org/t/p/w500/1XS1oqL89opfnbLl8WnZY1O1uJx.jpg", "rating": "8.4", "type": "tv"}
 ]
 
 
 def fetch_movies_from_site():
-    """Fetch live trending movies from https://movies.vixtube.net/"""
-    print(f"🌐 Fetching live movies from: {SITE_URL}/")
+    """Scrapes trending/latest movies from movies.vixtube.net homepage."""
+    url = f"{SITE_URL}/"
+    movies = []
     try:
-        r = requests.get(f"{SITE_URL}/", headers=HEADERS, timeout=20)
-        if r.status_code != 200:
-            print(f"⚠️ Non-200 status code: {r.status_code}")
+        print(f"🌐 Fetching live movies from: {url}")
+        res = requests.get(url, headers=HEADERS, timeout=20)
+        if res.status_code != 200:
+            print(f"⚠️ Non-200 status code: {res.status_code}")
             return FALLBACK_MOVIES
-        
-        html = r.text
-        # Card regex
-        pattern = r'<a\s+href="(/movie/\d+)"[^>]*>.*?<img\s+src="([^"]+)".*?<h3\s+class="card-title">\s*([^<]+)</h3>'
-        matches = re.findall(pattern, html, re.DOTALL)
-        
-        movies = []
-        for m in matches:
-            href, poster, title = m[0], m[1], html_lib.unescape(m[2].strip())
-            full_url = f"{SITE_URL}{href}"
-            
-            # Extract rating near this card if available
-            rate_match = re.search(r'⭐\s*([\d.]+)', html[html.find(href):html.find(href) + 400])
-            rating = rate_match.group(1) if rate_match else "7.8"
-            
-            movies.append({
-                "url": full_url,
-                "title": title,
-                "poster": poster,
-                "rating": rating,
-                "type": "movie"
-            })
-            
+
+        html = res.text
+        # Extract movie links like /movie/12345
+        pattern = re.compile(r'href=["\'](/movie/(\d+))["\']')
+        found_ids = set()
+
+        # Look for movie cards in HTML
+        card_pattern = re.compile(
+            r'<a[^>]+href=["\'](/movie/(\d+))["\'][^>]*>(.*?)</a>',
+            re.DOTALL | re.IGNORECASE
+        )
+
+        for match in card_pattern.finditer(html):
+            path, mid, content = match.group(1), match.group(2), match.group(3)
+            if mid in found_ids:
+                continue
+
+            img_match = re.search(r'src=["\']([^"\']+)["\']', content)
+            img_url = img_match.group(1) if img_match else None
+            if img_url and not img_url.startswith("http"):
+                img_url = f"{SITE_URL}{img_url}"
+
+            title_match = re.search(r'alt=["\']([^"\']+)["\']', content)
+            if not title_match:
+                title_match = re.search(r'<h[2-4][^>]*>(.*?)</h[2-4]>', content, re.DOTALL)
+            title = title_match.group(1).strip() if title_match else None
+            if title:
+                title = re.sub(r'<[^>]+>', '', title).strip()
+                title = html_lib.unescape(title)
+
+            if mid and title:
+                found_ids.add(mid)
+                movies.append({
+                    "url": f"{SITE_URL}/movie/{mid}",
+                    "title": title,
+                    "poster": img_url,
+                    "rating": "N/A",
+                    "type": "movie"
+                })
+
         print(f"✅ Extracted {len(movies)} movies from site!")
         if movies:
             return movies
     except Exception as e:
         print(f"⚠️ Error fetching movies: {e}")
-        
+
     return FALLBACK_MOVIES
 
 
 def fetch_tv_from_site():
-    """Fetch live trending TV series from https://movies.vixtube.net/tv"""
-    print(f"🌐 Fetching live TV series from: {SITE_URL}/tv")
+    """Scrapes TV series from movies.vixtube.net/tv."""
+    url = f"{SITE_URL}/tv"
+    series = []
     try:
-        r = requests.get(f"{SITE_URL}/tv", headers=HEADERS, timeout=20)
-        if r.status_code != 200:
-            print(f"⚠️ Non-200 status code: {r.status_code}")
+        print(f"🌐 Fetching live TV series from: {url}")
+        res = requests.get(url, headers=HEADERS, timeout=20)
+        if res.status_code != 200:
+            print(f"⚠️ Non-200 status code: {res.status_code}")
             return FALLBACK_TV
-            
-        html = r.text
-        # TV Card regex
-        pattern = r'<a\s+href="(/tv/\d+)"[^>]*>.*?<img[^>]+src="([^"]+)".*?<h2[^>]*>\s*([^<]+)\s*</h2>'
-        matches = re.findall(pattern, html, re.DOTALL)
-        
-        series = []
-        for m in matches:
-            href, poster, title = m[0], m[1], html_lib.unescape(m[2].strip())
-            full_url = f"{SITE_URL}{href}"
-            
-            rate_match = re.search(r'⭐\s*([\d.]+)', html[html.find(href):html.find(href) + 500])
-            rating = rate_match.group(1) if rate_match else "8.2"
-            
-            series.append({
-                "url": full_url,
-                "title": title,
-                "poster": poster,
-                "rating": rating,
-                "type": "tv"
-            })
-            
+
+        html = res.text
+        card_pattern = re.compile(
+            r'<a[^>]+href=["\'](/tv/(\d+))["\'][^>]*>(.*?)</a>',
+            re.DOTALL | re.IGNORECASE
+        )
+        found_ids = set()
+
+        for match in card_pattern.finditer(html):
+            path, tid, content = match.group(1), match.group(2), match.group(3)
+            if tid in found_ids:
+                continue
+
+            img_match = re.search(r'src=["\']([^"\']+)["\']', content)
+            img_url = img_match.group(1) if img_match else None
+            if img_url and not img_url.startswith("http"):
+                img_url = f"{SITE_URL}{img_url}"
+
+            title_match = re.search(r'alt=["\']([^"\']+)["\']', content)
+            if not title_match:
+                title_match = re.search(r'<h[2-4][^>]*>(.*?)</h[2-4]>', content, re.DOTALL)
+            title = title_match.group(1).strip() if title_match else None
+            if title:
+                title = re.sub(r'<[^>]+>', '', title).strip()
+                title = html_lib.unescape(title)
+
+            if tid and title:
+                found_ids.add(tid)
+                series.append({
+                    "url": f"{SITE_URL}/tv/{tid}",
+                    "title": title,
+                    "poster": img_url,
+                    "rating": "N/A",
+                    "type": "tv"
+                })
+
         print(f"✅ Extracted {len(series)} TV series from site!")
         if series:
             return series
@@ -141,10 +178,11 @@ def get_next_item_to_post():
     Manages daily quota:
     - Exactly 12 posts per day (spaced 2 hours apart)
     - 7 Movies and 5 TV Series
-    Uses daily_tracker.json to keep state across runs.
+    Uses daily_tracker.json to keep state across runs with Sri Lanka timezone.
     """
     tracker_file = "daily_tracker.json"
-    today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    now_sl = datetime.datetime.utcnow() + datetime.timedelta(hours=5, minutes=30)
+    today_str = now_sl.strftime("%Y-%m-%d")
     current_utc_hour = datetime.datetime.utcnow().hour
     
     tracker = {
@@ -161,14 +199,14 @@ def get_next_item_to_post():
                 if data.get("date") == today_str:
                     tracker = data
                 else:
-                    print(f"🔄 New day ({today_str})! Resetting daily post counter.")
+                    print(f"🔄 New day in Sri Lanka ({today_str})! Resetting daily post counter.")
         except Exception as e:
             print(f"⚠️ Tracker read error: {e}")
             
-    print(f"📅 Today: {tracker['date']} | Movies posted: {tracker['movies_today']}/7 | TV posted: {tracker['tv_today']}/5 (UTC Hour: {current_utc_hour})")
+    print(f"📅 Today (SL): {tracker['date']} | Movies posted: {tracker['movies_today']}/7 | TV posted: {tracker['tv_today']}/5 (UTC Hour: {current_utc_hour})")
     
-    # TV Slots: hours 2, 6, 10, 14, 18 (5 slots)
-    # Movie Slots: hours 0, 4, 8, 12, 16, 20, 22 (7 slots)
+    # TV Slots: 5 slots
+    # Movie Slots: 7 slots
     choose_tv = False
     if tracker["tv_today"] < 5 and tracker["movies_today"] >= 7:
         choose_tv = True
@@ -203,53 +241,56 @@ def get_next_item_to_post():
 
 
 async def get_target_entity(client, raw_target):
-    """Robustly resolve target channel entity for Telethon."""
-    raw = str(raw_target).strip()
+    """Robustly resolve target channel entity for Telethon, strictly avoiding groups."""
+    print(f"🔧 get_target_entity called with raw_target: {raw_target}")
     
-    candidates = []
-    if raw.startswith("-100") and raw[4:].isdigit():
-        candidates.append(int(raw))
-    elif raw.startswith("-") and raw[1:].isdigit():
-        candidates.append(int(raw))
-    elif raw.isdigit():
-        candidates.append(int(f"-100{raw}"))
-        candidates.append(int(raw))
+    TARGET_CHANNEL_ID = -1003944873164
+    TARGET_USERNAME = "free_movies_stream_hd"
     
-    if raw.startswith("@"):
-        candidates.append(raw)
-    else:
-        candidates.append(f"@{raw}")
-        candidates.append(raw)
-
+    # 1. Direct candidates
+    candidates = [TARGET_CHANNEL_ID, f"@{TARGET_USERNAME}", TARGET_USERNAME]
+    if raw_target and "4373091333" not in str(raw_target):
+        candidates.insert(0, raw_target)
+        
     for c in candidates:
         try:
             ent = await client.get_entity(c)
-            print(f"✅ Direct entity resolution succeeded for: {c} -> {getattr(ent, 'title', ent.id)}")
-            return ent
+            # Make sure it's NOT a group/megagroup
+            is_group = getattr(ent, 'megagroup', False) or (getattr(ent, 'title', '') and "group" in getattr(ent, 'title', '').lower())
+            if not is_group:
+                print(f"✅ Direct entity resolution succeeded for channel: {getattr(ent, 'title', ent.id)} (ID: {ent.id})")
+                return ent
         except Exception:
-            continue
+            pass
 
+    # 2. Iterate dialogs looking ONLY for BROADCAST channels
     print("🔍 Searching account dialogs for channel match...")
-    clean_target = raw.lower().lstrip("@").lstrip("-100").lstrip("-")
-    
     async for dialog in client.iter_dialogs():
-        if dialog.is_channel:
-            d_id = str(dialog.id)
-            d_user = (getattr(dialog.entity, 'username', '') or '').lower()
-            d_title = (dialog.title or '').lower()
+        is_broadcast = getattr(dialog.entity, 'broadcast', False)
+        is_group = dialog.is_group or getattr(dialog.entity, 'megagroup', False)
+        d_title = (dialog.title or '').lower()
+        
+        # Strictly ignore discussion group
+        if is_group or "group" in d_title or not is_broadcast:
+            continue
             
-            if clean_target in d_id or (d_user and clean_target == d_user) or clean_target in d_title:
-                print(f"✅ Matched channel dialog: {dialog.title} (ID: {dialog.id})")
-                return dialog.entity
+        d_id = str(dialog.id)
+        d_user = (getattr(dialog.entity, 'username', '') or '').lower()
+        
+        if "3944873164" in d_id or d_user == TARGET_USERNAME or "free_movies_stream" in d_user or "hd movies hub" in d_title:
+            print(f"✅ Matched broadcast channel dialog: {dialog.title} (ID: {dialog.id})")
+            return dialog.entity
 
+    # 3. Last fallback: any broadcast channel that is NOT a group
     async for dialog in client.iter_dialogs():
-        if dialog.is_channel:
-            d_title = (dialog.title or '').lower()
-            if "movie" in d_title or "stream" in d_title or "hub" in d_title:
-                print(f"✅ Auto-selected movie channel: {dialog.title} (ID: {dialog.id})")
-                return dialog.entity
+        is_broadcast = getattr(dialog.entity, 'broadcast', False)
+        is_group = dialog.is_group or getattr(dialog.entity, 'megagroup', False)
+        d_title = (dialog.title or '').lower()
+        if is_broadcast and not is_group and "group" not in d_title:
+            print(f"✅ Auto-selected broadcast channel: {dialog.title} (ID: {dialog.id})")
+            return dialog.entity
 
-    return raw_target
+    raise RuntimeError("Could not find broadcast channel @free_movies_stream_hd!")
 
 
 async def main():
@@ -324,7 +365,7 @@ async def main():
                 caption,
                 parse_mode="md"
             )
-        print(f"🎉 Successfully posted to Telegram: {item['title']}")
+        print(f"🎉 Successfully posted to Telegram Channel: {channel_name} - {item['title']}")
         
         # Update posted_movies.txt
         with open(posted_file, "a") as f:
