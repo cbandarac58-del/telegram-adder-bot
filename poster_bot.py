@@ -324,7 +324,8 @@ async def main():
     if item.get("rating") and item["rating"] != "N/A":
         caption += f"⭐ Rating: {item['rating']}/10\n\n"
     caption += f"🍿 [Watch Online in HD]({item['url']})\n\n"
-    caption += f"👉 Join for Daily HD Movies & Series: @free_movies_stream_hd\n\n"
+    caption += f"👉 Join for Daily HD Movies & Series: @free_movies_stream_hd\n"
+    caption += f"🔍 Looking for any other Movie? Search here: @free_movies_stream_bot\n\n"
     caption += f"{hashtags}"
 
     # Download poster image
