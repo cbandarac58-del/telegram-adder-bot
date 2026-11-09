@@ -116,7 +116,7 @@ def fetch_movies_from_site():
     movies = []
     for u in urls:
         try:
-            print(f"ðŸŒ Fetching live movies from: {u}")
+            print(f"🌐 Fetching live movies from: {u}")
             res = requests.get(u, headers=HEADERS, timeout=20)
             if res.status_code == 200:
                 cards = extract_cards(res.text, "movie")
@@ -124,13 +124,13 @@ def fetch_movies_from_site():
                     if not any(m["url"] == c["url"] for m in movies):
                         movies.append(c)
         except Exception as e:
-            print(f"âš ï¸ Error fetching {u}: {e}")
+            print(f"⚠️ Error fetching {u}: {e}")
 
     if movies:
-        print(f"âœ… Extracted {len(movies)} fresh movies from site!")
+        print(f"✅ Extracted {len(movies)} fresh movies from site!")
         return movies
 
-    print("â„¹ï¸ Using fallback movies list.")
+    print("ℹ️ Using fallback movies list.")
     return FALLBACK_MOVIES
 
 
@@ -139,18 +139,18 @@ def fetch_tv_from_site():
     url = f"{SCRAPE_URL}/tv"
     series = []
     try:
-        print(f"ðŸŒ Fetching live TV series from: {url}")
+        print(f"🌐 Fetching live TV series from: {url}")
         res = requests.get(url, headers=HEADERS, timeout=20)
         if res.status_code == 200:
             series = extract_cards(res.text, "tv")
     except Exception as e:
-        print(f"âš ï¸ Error fetching TV series: {e}")
+        print(f"⚠️ Error fetching TV series: {e}")
 
     if series:
-        print(f"âœ… Extracted {len(series)} fresh TV series from site!")
+        print(f"✅ Extracted {len(series)} fresh TV series from site!")
         return series
 
-    print("â„¹ï¸ Using fallback TV list.")
+    print("ℹ️ Using fallback TV list.")
     return FALLBACK_TV
 
 
@@ -182,11 +182,11 @@ def get_next_item_to_post():
                 if data.get("date") == today_str:
                     tracker = data
                 else:
-                    print(f"ðŸ”„ New day in Sri Lanka ({today_str})! Resetting daily post counter.")
+                    print(f"🔄 New day in Sri Lanka ({today_str})! Resetting daily post counter.")
         except Exception as e:
-            print(f"âš ï¸ Tracker read error: {e}")
+            print(f"⚠️ Tracker read error: {e}")
 
-    print(f"ðŸ“… Today (SL): {tracker['date']} | Movies posted: {tracker['movies_today']}/7 | TV posted: {tracker['tv_today']}/5")
+    print(f"📅 Today (SL): {tracker['date']} | Movies posted: {tracker['movies_today']}/7 | TV posted: {tracker['tv_today']}/5")
 
     # Load posted history
     posted = []
@@ -208,7 +208,7 @@ def get_next_item_to_post():
         choose_tv = (tracker["tv_today"] < 5)
 
     post_type = "tv" if choose_tv else "movie"
-    print(f"ðŸŽ¯ Target item type for this run: {post_type.upper()}")
+    print(f"🎯 Target item type for this run: {post_type.upper()}")
 
     candidates = fetch_tv_from_site() if post_type == "tv" else fetch_movies_from_site()
     
@@ -218,7 +218,7 @@ def get_next_item_to_post():
     if unposted:
         selected = unposted[0]
     else:
-        print("â„¹ï¸ All available candidates were posted in history! Cycling least recently posted...")
+        print("ℹ️ All available candidates were posted in history! Cycling least recently posted...")
         # Find candidates ordered by when they were posted (oldest first)
         def get_posted_index(item):
             try:
@@ -234,7 +234,7 @@ def get_next_item_to_post():
 
 async def get_target_entity(client, raw_target):
     """Robustly resolve target channel entity for Telethon, strictly avoiding groups."""
-    print(f"ðŸ”§ get_target_entity called with raw_target: {raw_target}")
+    print(f"🔧 get_target_entity called with raw_target: {raw_target}")
 
     TARGET_CHANNEL_ID = -1003944873164
     TARGET_USERNAME = "free_movies_stream_hd"
@@ -249,13 +249,13 @@ async def get_target_entity(client, raw_target):
             ent = await client.get_entity(c)
             is_group = getattr(ent, 'megagroup', False) or (getattr(ent, 'title', '') and "group" in getattr(ent, 'title', '').lower())
             if not is_group:
-                print(f"âœ… Direct entity resolution succeeded for channel: {getattr(ent, 'title', ent.id)} (ID: {ent.id})")
+                print(f"✅ Direct entity resolution succeeded for channel: {getattr(ent, 'title', ent.id)} (ID: {ent.id})")
                 return ent
         except Exception:
             pass
 
     # 2. Iterate dialogs looking ONLY for BROADCAST channels
-    print("ðŸ” Searching account dialogs for channel match...")
+    print("🔍 Searching account dialogs for channel match...")
     async for dialog in client.iter_dialogs():
         is_broadcast = getattr(dialog.entity, 'broadcast', False)
         is_group = dialog.is_group or getattr(dialog.entity, 'megagroup', False)
@@ -268,7 +268,7 @@ async def get_target_entity(client, raw_target):
         d_user = (getattr(dialog.entity, 'username', '') or '').lower()
 
         if "3944873164" in d_id or d_user == TARGET_USERNAME or "free_movies_stream" in d_user or "hd movies hub" in d_title:
-            print(f"âœ… Matched broadcast channel dialog: {dialog.title} (ID: {dialog.id})")
+            print(f"✅ Matched broadcast channel dialog: {dialog.title} (ID: {dialog.id})")
             return dialog.entity
 
     raise RuntimeError("Could not find broadcast channel @free_movies_stream_hd!")
@@ -277,14 +277,14 @@ async def get_target_entity(client, raw_target):
 async def main():
     item, tracker, tracker_file, posted_file = get_next_item_to_post()
     if not item:
-        print("âŒ No item available to post.")
+        print("❌ No item available to post.")
         return
 
-    print(f"ðŸš€ Preparing to post: {item['title']} ({item['type'].upper()})")
+    print(f"🚀 Preparing to post: {item['title']} ({item['type'].upper()})")
 
     # Setup caption
     is_tv = item["type"] == "tv"
-    icon = "ðŸ“º" if is_tv else "ðŸŽ¬"
+    icon = "\U0001f4fa" if is_tv else "\U0001f3ac"
     type_badge = " (TV Series)" if is_tv else ""
 
     # Hashtags
@@ -303,17 +303,17 @@ async def main():
 
     caption = f"{icon} **{item['title']}**{type_badge}\n\n"
     if item.get("rating") and item["rating"] != "N/A":
-        caption += f"â­ Rating: {item['rating']}/10\n\n"
-    caption += f"ðŸ¿ [Watch Online in HD]({item['url']})\n\n"
-    caption += f"ðŸ‘‰ Join for Daily HD Movies & Series: @free_movies_stream_hd\n"
-    caption += f"ðŸ” Looking for any other Movie? Search here: @free_movies_stream_bot\n\n"
+        caption += f"\u2b50 Rating: {item['rating']}/10\n\n"
+    caption += f"\U0001f37f [Watch Online in HD]({item['url']})\n\n"
+    caption += f"\U0001f449 Join for Daily HD Movies & Series: @free_movies_stream_hd\n"
+    caption += f"\U0001f50d Looking for any other Movie? Search here: @free_movies_stream_bot\n\n"
     caption += f"{hashtags}"
 
     # Download poster image
     img_path = None
     if item.get("poster"):
         try:
-            print(f"ðŸ–¼ï¸ Downloading poster from {item['poster']}...")
+            print(f"🖼️ Downloading poster from {item['poster']}...")
             img_res = requests.get(item["poster"], headers=HEADERS, timeout=25)
             if img_res.status_code == 200:
                 safe_title = "".join(c for c in item["title"] if c.isalnum() or c in (" ", "_", "-")).rstrip()
@@ -321,9 +321,9 @@ async def main():
                 img_path = f"/tmp/{safe_title.replace(' ', '_')}.jpg"
                 with open(img_path, "wb") as f:
                     f.write(img_res.content)
-                print(f"âœ… Poster downloaded to {img_path}")
+                print(f"✅ Poster downloaded to {img_path}")
         except Exception as ie:
-            print(f"âš ï¸ Poster download error: {ie}")
+            print(f"⚠️ Poster download error: {ie}")
 
     # Telethon client
     client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
@@ -331,7 +331,7 @@ async def main():
 
     entity = await get_target_entity(client, TARGET_CHANNEL)
     channel_name = getattr(entity, 'title', str(TARGET_CHANNEL))
-    print(f"ðŸŽ¯ Target Channel: {channel_name}")
+    print(f"🎯 Target Channel: {channel_name}")
 
     try:
         if img_path and os.path.exists(img_path):
@@ -347,7 +347,7 @@ async def main():
                 caption,
                 parse_mode="md"
             )
-        print(f"ðŸŽ‰ Successfully posted to Telegram Channel: {channel_name} - {item['title']}")
+        print(f"🎉 Successfully posted to Telegram Channel: {channel_name} - {item['title']}")
 
         # Update posted_movies.txt
         with open(posted_file, "a") as f:
@@ -363,10 +363,10 @@ async def main():
         with open(tracker_file, "w") as f:
             json.dump(tracker, f, indent=2)
 
-        print(f"ðŸ’¾ Updated {tracker_file}: Movies {tracker['movies_today']}/7, TV {tracker['tv_today']}/5")
+        print(f"💾 Updated {tracker_file}: Movies {tracker['movies_today']}/7, TV {tracker['tv_today']}/5")
 
     except Exception as e:
-        print(f"âŒ Error sending to Telegram: {e}")
+        print(f"❌ Error sending to Telegram: {e}")
         raise e
     finally:
         await client.disconnect()
