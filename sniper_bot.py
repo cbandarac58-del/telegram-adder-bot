@@ -259,7 +259,8 @@ async def main():
         signal_time = df.index[-2]
 
     if signal_row is not None:
-        sig_sl_time = signal_time + timedelta(hours=5, minutes=30)
+        sig_utc = signal_time.tz_convert('UTC') if signal_time.tzinfo is not None else signal_time
+        sig_sl_time = sig_utc + timedelta(hours=5, minutes=30)
         direction = signal_row['Signal']
         entry = signal_row['Close']
         atr   = signal_row['ATR']
@@ -307,7 +308,8 @@ async def main():
         last_sig_info = ""
         if not recent_sigs.empty:
             ls_row = recent_sigs.iloc[-1]
-            ls_time = recent_sigs.index[-1] + timedelta(hours=5, minutes=30)
+            ls_utc = recent_sigs.index[-1].tz_convert('UTC') if recent_sigs.index[-1].tzinfo is not None else recent_sigs.index[-1]
+            ls_time = ls_utc + timedelta(hours=5, minutes=30)
             last_sig_info = f"\n🎯 **Last Confirmed Signal:** `{ls_row['Signal']}` @ `${ls_row['Close']:,.2f}` ({ls_time.strftime('%m-%d %I:%M %p')} SL)"
 
         msg = (
